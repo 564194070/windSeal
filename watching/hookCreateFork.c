@@ -43,21 +43,33 @@ int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *co
 	/*
 	 * 内核插桩点 tracepoint:syscalls:sys_enter_execve 在父进程中创建一个子进程,自己成调用exec启动新的程序(执行程序函数)
 	 * 1.filename 二进制可执行文件或脚本
-	 * 2.argv	  调用程序执行的参数序列
-	 * 3.envp	  键值对作为新程序的环境变量
+	 * 2.argv     调用程序执行的参数序列
+	 * 3.envp     键值对作为新程序的环境变量
 	*/
 
 	// uid 用户ID
 	u32 uid = bpf_get_current_uid_gid() & 0xffffffff;
 	// pid_tgid 线程ID
 	u64 pid_tgid = bpf_get_current_pid_tgid();
-	// tid 线程ID
+	// tid 线程ID 线程唯一
 	u32 tid = (u32)pid_tgid;
 	// pid 进程ID
 	u32 pid = pid_tgid >> 32;
-	//
-	
+
+	// 过滤模板，在正式编译前进行替换	
 	UID_FILTER
 
+	if (container_should_be_filtered()) 
+	{
+		return 0;	
+	}
+
+	// 创建预设的数据结构，存储exec的参数并
+	struct forkInfo data = {};
+	// 创建结构体，获取当前进程的信息
+	struct task_struct *task;
+	
+	data.ppid = pid;
+	task = 
 
 }
