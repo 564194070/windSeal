@@ -22,4 +22,11 @@ if args.ppid:
 else:
     bpf=bpf.replace("PPID_FILTER",'')
 
+# cgroupMap的默认过滤函数
+bpf = filter_by_containers(args)+bpf
+
+# 如果需要观察源码，添加的参数
+if args.ebpf:
+    print(bpf)
+    exit()
 
