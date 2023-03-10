@@ -3,6 +3,13 @@ import argparse
 
 # 引入需要的前端框架
 
+
+# BCC前端会有以下几部分代码
+# 1.声明后文中可能用到的函数；2.参数解析相关函数；3.桩点相关函数
+
+
+
+# 1.声明后文中需要使用的函数
 # 声明一下后面需要使用的代码
 # 选定监控的用户信息
 def parseUid(user):
@@ -23,16 +30,21 @@ def parseUid(user):
         # 如果数值UID小于0的可能
         return result
 
+examples = """
+    #参数还没定，暂时先空着
+"""
+
 
 # 关于参数解析的事件
 parser = argparse.ArgumentParser(
         # 调用参数帮助信息前，打印的信息
-        description="Trace exec() syscalls",
+        description="跟踪进程创建的工具",
         # 自定义帮助文档输出的类
         formatterClass=argparse.RawDescriptionHelpFormatter,
         # 帮助信息结尾处打印的信息
         epilog=examples
         )
+parser.add_argument ("-T", "--time", action="store_true",help="" )
 
 
 
@@ -66,7 +78,6 @@ bpf = filter_by_containers(args)+bpf
 if args.ebpf:
     print(bpf)
     exit()
-
 
 
 
