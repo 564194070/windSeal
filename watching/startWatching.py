@@ -44,7 +44,7 @@ parser = argparse.ArgumentParser(
         # 帮助信息结尾处打印的信息
         epilog=examples
         )
-parser.add_argument ("-T", "--time", action="store_true",help="" )
+parser.add_argument ("-T", "--time", action="store_true",help="计时" )
 
 
 
@@ -79,5 +79,59 @@ if args.ebpf:
     print(bpf)
     exit()
 
+execve_fnname = b.get_syscall_fnname("execve")
+# 插入execve的起点
+bpf.attach_kprobe(event=execve_fnname, fn_name="hookSyscallExecve")
+# 插入execve的终点
+bpf.attach_kretprobe(event=execve_fnname, fn_name="hookSyscallExecveRet")
+
+# 打印显示的头部信息
+if args.time:
+    print("%-9s" % ("TIME"), end="")
+if args.timestamp:
+    print("%-8s" % ("TIME(s)"), end="")
+if args.print_uid:
+    print("%-6s" % ("UID"), end="")
+
+print("%-16s %-7s %-7s %3s %s" % ("PCOMM", "PID", "PPID", "RET", "ARGS"))
 
 
+class EventType(object):
+    EVENT_ARG = 0
+    EVENT_RET = 1
+
+# 计算程序开始时间
+start_ts = time.time()
+#构建一个默认value为list的字典
+argv = defaultdict(list)
+
+
+# PPID匹配，短时进程可能会退出，在一些内核版本可能会出问题
+# 这是从task0>real_parent->tgid获取PPID
+def getPPID(pid):
+    try:
+        with open("/proc/%d/status" % pid) as status:
+            for line in status:
+                if line.startwith("PPid:"):
+                    return int(line.split()[1])
+    except IOError:
+        pass
+    return 0
+
+# 进程事件和前端的交互
+def printEvent(cpu, data, size):
+    event = bpf["events"].event(data)
+    skip = False
+
+    if event.type == EventType.EVENT_ARG:
+        # 默认value的字典
+        argv[event.pid].append(event.argv)
+    elif event.type == EventType.EVENT_RET:
+        if event.retval != 0 and not args.fails:
+            skip = True
+        if args.name and not re.search(bytes(args.name), event.comm)
+            skip = True
+        if args.line and not re.search(bytes(args.line), b' '.join(argv[event.pid]))
+            skip = True
+        if args.quote:
+            argv[event.pid]
