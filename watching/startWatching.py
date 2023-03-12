@@ -133,5 +133,17 @@ def printEvent(cpu, data, size):
             skip = True
         if args.line and not re.search(bytes(args.line), b' '.join(argv[event.pid]))
             skip = True
+        # 给预设的字典中，关于事件的进程号赋值
         if args.quote:
-            argv[event.pid]
+            argv[event.pid] = [
+                    b"\"" + arg.replace(b"\"", b"\\\"") + b"\""
+                    for arg in argv[event.pid]
+                    ]
+
+        #正常情况的主分支
+        if not skip:
+            if args.time:
+                printb(b"%-9s" % strftime("%H:%M:%S").encode('ascii'))
+            if args.timestamp:
+                printb(b"%-8.3f" % (time.time() - start_ts))
+            if args.print_uid
