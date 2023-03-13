@@ -147,3 +147,22 @@ def printEvent(cpu, data, size):
             if args.timestamp:
                 printb(b"%-8.3f" % (time.time() - start_ts))
             if args.print_uid
+                printb(b"%-6d" % event.uid)
+            ppid = event.ppid if event.ppid > 0 else get_ppid(event.pid)
+            ppid = b"%d" % ppid if ppid > 0 else b"?"
+                        argv_text = b' '.join(argv[event.pid]).replace(b'\n', b'\\n')
+            printb(b"%-16s %-7d %-7s %3d %s" % (event.comm, event.pid,
+                   ppid, event.retval, argv_text))
+        try:
+            del(argv[event.pid])
+        except Exception:
+            pass
+
+
+# 循环等待性能事件触发
+b["events"].open_perf_buffer(print_event)
+while 1:
+    try:
+        b.perf_buffer_poll()
+    except KeyboardInterrupt:
+        exit()
