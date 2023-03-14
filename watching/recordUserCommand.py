@@ -37,6 +37,8 @@ InsertCommand = "INSERT "
 bpf_text = """ #include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/nsproxy.h>
+#include <net/net_namespace.h>
 
 #define ARGSIZE 128
 
@@ -51,6 +53,7 @@ struct forkInfo {
 	u32 pid;			// 用户空间的进程ID
 	u32 ppid;			// 父进程ID
 	u32 uid;			// 创建进程的用户ID
+    u32 netns;         // cgroup名称空间信息,用来分辨指令所在的容器
 	char comm[50];		// 进程名称
 	char argv[ARGSIZE];	// 创建一个数组用来接收插桩点参数的内容
 	int retval;			// 记录插桩点的返回值
@@ -103,6 +106,7 @@ int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *co
 	// pid 进程ID
 	u32 pid = pid_tgid >> 32;
 
+
 	// 过滤模板，在正式编译前进行替换	
 	UID_FILTER
 
@@ -116,7 +120,10 @@ int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *co
 	task = (struct task_struct *)bpf_get_current_task();
 	// 从task里面拿父进程信息
 	data.ppid = task->real_parent->tgid;
-	
+	// 获取进程所在的cgroup空间
+    data.netns = task->nsproxy->net_ns->ns.inum;
+    
+
 	// 父进程过滤信息
 	PPID_FILTER
 	// 辅助函数，用来获取当前进程名称
@@ -203,7 +210,9 @@ def print_event (cpu, data, size):
     # 获取性能事件打印的参数
     event = b["events"].event(data)
     # 填充用户行为数据
-    print("%-16s %-7s %3d" % (event.comm, event.pid, event.retval))
+    if event.type == EventType.EVENT_ARG:
+        SQL = "INSERT INTO USER_COMMAND VALUE ()"
+    print("%-16s %-7s %-3d %-7d" % (event.comm, event.pid, event.retval,event.netns))
 # 循环打印性能事件
 b["events"].open_perf_buffer(print_event)
 while 1:
