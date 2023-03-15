@@ -225,13 +225,16 @@ def print_event(cpu, data, size):
 	comm = event.comm.decode('utf8')
 	machine = socket.gethostname()
 	if event.type == EventType.EVENT_ARG:
-		argv = event.argv
+		argv = event.argv.decode('utf8')
 		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,ARGS) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, argv)
-		cursor.execute(SQL)
+		print(SQL)
+		#cursor.execute(SQL)
+		#mysql.commit()
 	elif event.type == EventType.EVENT_RET:
-		retval = event.retval
+		retval = event.retval.decode('utf8')
 		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,RET) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, retval)
 		cursor.execute(SQL)
+		mysql.commit()
 # 循环打印性能事件
 b["events"].open_perf_buffer(print_event)
 while 1:
