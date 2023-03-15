@@ -1,8 +1,10 @@
 from bcc import BPF
 
 import os
-import pymysql 
-import time
+import pymysql
+from time import strftime
+from datetime import datetime
+import socket
 
 
 # 过滤开关
@@ -19,11 +21,11 @@ mysqlPasswd = os.getenv('MYSQL_PASSWD')
 mysqlDatabase = os.getenv("MYSQL_DATABASE")
 
 # 链接MYSQL数据库
-mysql = pymysql.connect (
-    host = mysqlAddress,
-    user = mysqlUser,
-    passwd = mysqlPasswd,
-    database = mysqlDatabase
+mysql = pymysql.connect(
+    host=mysqlAddress,
+    user=mysqlUser,
+    passwd=mysqlPasswd,
+    database=mysqlDatabase
 )
 
 # 设置MYSQL游标
@@ -182,14 +184,16 @@ int hookSyscallExecveRet(struct pt_regs* ctx)
 bpf_text = bpf_text.replace("MAXARG", "20")
 
 if UIDSwitch:
-    bpf_text=bpf_text.replace("UID_FILTER", 'if (uid != %s) {return 0;}' % uidFilter)
+    bpf_text = bpf_text.replace(
+        "UID_FILTER", 'if (uid != %s) {return 0;}' % uidFilter)
 else:
-    bpf_text=bpf_text.replace("UID_FILTER", ' ')
+    bpf_text = bpf_text.replace("UID_FILTER", ' ')
 # 如果设计了PPID过滤规则也添加到源码
 if PPIDSwitch:
-    bpf_text=bpf_text.replace("PPID_FILTER",'if (data.ppid != %s) {return 0;}' % ppidFilter)
+    bpf_text = bpf_text.replace(
+        "PPID_FILTER", 'if (data.ppid != %s) {return 0;}' % ppidFilter)
 else:
-    bpf_text=bpf_text.replace("PPID_FILTER",' ')
+    bpf_text = bpf_text.replace("PPID_FILTER", ' ')
 
 # 设置BPF注入点
 b = BPF(text=bpf_text)
@@ -198,21 +202,36 @@ b.attach_kprobe(event=execve_fnname, fn_name="hookSyscallExecve")
 b.attach_kretprobe(event=execve_fnname, fn_name="hookSyscallExecveRet")
 
 # 分辨返回值或者参数列表
+
+
 class EventType(object):
     EVENT_ARG = 0
     EVENT_RET = 1
 
-start_ts = time.time()
+
+start_ts = datetime.now()
 
 
 # 和性能事件交互的前端
-def print_event (cpu, data, size):
-    # 获取性能事件打印的参数
-    event = b["events"].event(data)
-    # 填充用户行为数据
-    if event.type == EventType.EVENT_ARG:
-        SQL = "INSERT INTO USER_COMMAND VALUE ()"
-    print("%-16s %-7s %-3d %-7d" % (event.comm, event.pid, event.retval,event.netns))
+def print_event(cpu, data, size):
+	# 获取性能事件打印的参数
+	event = b["events"].event(data)
+	# 填充用户行为数据
+	time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+	user = event.uid
+	pid = event.pid
+	ppid = event.ppid
+	netns = event.netns
+	comm = event.comm.decode('utf8')
+	machine = socket.gethostname()
+	if event.type == EventType.EVENT_ARG:
+		argv = event.argv
+		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,ARGS) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, argv)
+		cursor.execute(SQL)
+	elif event.type == EventType.EVENT_RET:
+		retval = event.retval
+		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,RET) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, retval)
+		cursor.execute(SQL)
 # 循环打印性能事件
 b["events"].open_perf_buffer(print_event)
 while 1:
