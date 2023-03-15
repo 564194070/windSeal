@@ -226,13 +226,13 @@ def print_event(cpu, data, size):
 	machine = socket.gethostname()
 	if event.type == EventType.EVENT_ARG:
 		argv = event.argv.decode('utf8')
+        # SQL这块先不准备展示进程名称，后面和监控frok/vfrok/clone行为拿到的数据在做一个联合查询然后演示
 		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,ARGS) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, argv)
-		print(SQL)
-		#cursor.execute(SQL)
-		#mysql.commit()
+		cursor.execute(SQL)
+		mysql.commit()
 	elif event.type == EventType.EVENT_RET:
-		retval = event.retval.decode('utf8')
-		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,RET) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, retval)
+		retval = event.retval
+		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,RET) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, str(retval))
 		cursor.execute(SQL)
 		mysql.commit()
 # 循环打印性能事件
