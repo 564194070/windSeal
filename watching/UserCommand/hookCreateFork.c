@@ -127,6 +127,7 @@ int hookSyscallExecveRet(struct pt_regs* ctx)
 
     task = (struct task_struct *)bpf_get_current_task();
 	data.ppid = task->real_parent->tgid;
+	
 
 	// 父进程ID过滤
     PPID_FILTER
