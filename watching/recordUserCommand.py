@@ -214,7 +214,6 @@ def print_event(cpu, data, size):
         argv_text = argv_text.decode('utf8')
         SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,ARGS) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (
             time, user, comm, "1", machine, netns, user, pid, ppid, argv_text)
-        print(SQL)
         cursor.execute(SQL)
         mysql.commit()
     elif event.type == EventType.EVENT_RET:
