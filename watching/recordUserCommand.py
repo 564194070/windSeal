@@ -5,7 +5,7 @@ import pymysql
 from time import strftime
 from datetime import datetime
 import socket
-
+from collections import defaultdict
 
 # 过滤开关
 UIDSwitch = False
@@ -36,20 +36,18 @@ mysqlTable = "UserCommand"
 InsertCommand = "INSERT "
 
 # bpf注入点信息
-bpf_text = """ #include <uapi/linux/ptrace.h>
+bpf_text = """ 
+#include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/nsproxy.h>
 #include <net/net_namespace.h>
-
 #define ARGSIZE 128
-
 enum eventType
 {
 	EventArg,
 	EventRet,
 };
-
 // 抽象出来一个进程的描述信息
 struct forkInfo {
 	u32 pid;			// 用户空间的进程ID
@@ -61,13 +59,10 @@ struct forkInfo {
 	int retval;			// 记录插桩点的返回值
 	enum eventType type;// 记录事件的类型
 };
-
 // 创建一个性能事件，在触发该事件的时时候发生前后端交互行为
 BPF_PERF_OUTPUT(events);
-
 static int __getArgs(struct pt_regs *ctx, void *ptr, struct forkInfo *data);
 static int getArgs(struct pt_regs *ctx, void *ptr, struct forkInfo *data);
-
 // pt_regs BPF现场和上下文寄存器
 static int getArgs(struct pt_regs *ctx, void *ptr, struct forkInfo *data)
 {
@@ -81,16 +76,13 @@ static int getArgs(struct pt_regs *ctx, void *ptr, struct forkInfo *data)
 	}
 	return 0;
 }
-
 static int __getArgs(struct pt_regs *ctx, void *ptr, struct forkInfo *data)
 {
 	bpf_probe_read_user(data->argv, sizeof(data->argv), ptr);
 	events.perf_submit(ctx,data,sizeof(struct forkInfo));
 	return 1;
 }
-
-
-int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *const * argv, const char *const * envp)
+int syscall__execve(struct pt_regs *ctx, const char * filename, const char *const * argv, const char *const * envp)
 {
 	/*
 	 * 内核插桩点 tracepoint:syscalls:sys_enter_execve 在父进程中创建一个子进程,自己成调用exec启动新的程序(执行程序函数)
@@ -98,7 +90,6 @@ int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *co
 	 * 2.argv     调用程序执行的参数序列
 	 * 3.envp     键值对作为新程序的环境变量
 	*/
-
 	// uid 用户ID
 	u32 uid = bpf_get_current_uid_gid() & 0xffffffff;
 	// pid_tgid 线程ID
@@ -107,11 +98,8 @@ int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *co
 	u32 tid = (u32)pid_tgid;
 	// pid 进程ID
 	u32 pid = pid_tgid >> 32;
-
-
 	// 过滤模板，在正式编译前进行替换	
 	UID_FILTER
-
 	// 创建预设的数据结构,存储exec的参数并
 	struct forkInfo data = {};
 	// 创建结构体，获取当前进程的信息
@@ -125,13 +113,11 @@ int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *co
 	// 获取进程所在的cgroup空间
     data.netns = task->nsproxy->net_ns->ns.inum;
     
-
 	// 父进程过滤信息
 	PPID_FILTER
 	// 辅助函数，用来获取当前进程名称
 	bpf_get_current_comm(&data.comm, sizeof(data.comm));
 	data.type = EventArg;
-
 	//读取写入参数
 	__getArgs(ctx, (void*)filename, &data);
 	//跳过了第一个参数，现在读取剩下的参数  如果循环次数是常数，编译器会直接展开
@@ -150,7 +136,6 @@ int hookSyscallExecve(struct pt_regs *ctx, const char * filename, const char *co
 out:
 	return 0;
 }
-
 // 在离开函数的时候，上报下性能事件和外界交互
 int hookSyscallExecveRet(struct pt_regs* ctx)
 {
@@ -158,21 +143,17 @@ int hookSyscallExecveRet(struct pt_regs* ctx)
     struct forkInfo data = {};
     // 创建结构体，获取当前进程的信息
     struct task_struct *task;
-
 	u32 uid = bpf_get_current_uid_gid() & 0xffffffff;
     UID_FILTER
     data.pid = bpf_get_current_pid_tgid() >> 32;
     data.uid = uid;
-
     task = (struct task_struct *)bpf_get_current_task();
 	data.ppid = task->real_parent->tgid;
-
 	// 父进程ID过滤
     PPID_FILTER
 	// 进程名获取
     bpf_get_current_comm(&data.comm, sizeof(data.comm));
     data.type = EventRet;
-
 	// 获取返回值
     data.retval = PT_REGS_RC(ctx);
 	//提交性能事件，开始和前端交互
@@ -198,7 +179,8 @@ else:
 # 设置BPF注入点
 b = BPF(text=bpf_text)
 execve_fnname = b.get_syscall_fnname("execve")
-b.attach_kprobe(event=execve_fnname, fn_name="hookSyscallExecve")
+# 不是这个就不能读入参了，现阶段原理暂不明细
+b.attach_kprobe(event=execve_fnname, fn_name="syscall__execve")
 b.attach_kretprobe(event=execve_fnname, fn_name="hookSyscallExecveRet")
 
 # 分辨返回值或者参数列表
@@ -210,31 +192,39 @@ class EventType(object):
 
 
 start_ts = datetime.now()
-
+argv = defaultdict(list)
 
 # 和性能事件交互的前端
+
+
 def print_event(cpu, data, size):
-	# 获取性能事件打印的参数
-	event = b["events"].event(data)
-	# 填充用户行为数据
-	time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-	user = event.uid
-	pid = event.pid
-	ppid = event.ppid
-	netns = event.netns
-	comm = event.comm.decode('utf8')
-	machine = socket.gethostname()
-	if event.type == EventType.EVENT_ARG:
-		argv = event.argv.decode('utf8')
-        # SQL这块先不准备展示进程名称，后面和监控frok/vfrok/clone行为拿到的数据在做一个联合查询然后演示
-		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,ARGS) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, argv)
-		cursor.execute(SQL)
-		mysql.commit()
-	elif event.type == EventType.EVENT_RET:
-		retval = event.retval
-		SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,RET) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (time, user, comm, "1", machine, netns, user, pid, ppid, str(retval))
-		cursor.execute(SQL)
-		mysql.commit()
+    # 获取性能事件打印的参数
+    event = b["events"].event(data)
+    # 填充用户行为数据
+    time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user = event.uid
+    pid = event.pid
+    ppid = event.ppid
+    netns = event.netns
+    comm = event.comm.decode('utf8')
+    machine = socket.gethostname()
+    if event.type == EventType.EVENT_ARG:
+        argv[event.pid].append(event.argv)
+        argv_text = b' '.join(argv[event.pid]).replace(b'\n', b'\\n')
+        argv_text = argv_text.decode('utf8')
+        SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,ARGS) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (
+            time, user, comm, "1", machine, netns, user, pid, ppid, argv_text)
+        print(SQL)
+        cursor.execute(SQL)
+        mysql.commit()
+    elif event.type == EventType.EVENT_RET:
+        retval = event.retval
+        SQL = "INSERT INTO USER_COMMAND (TIME,USER,COMMAND,LEVEL,MACHINE,CONTAINER,UID,PID,PPID,RET) VALUES (str_to_date('\%s\','%%Y-%%m-%%d %%H:%%i:%%s.%%f'),'%s','%s','%s','%s','%s','%s','%s','%s','%s')" % (
+            time, user, comm, "1", machine, netns, user, pid, ppid, retval)
+        cursor.execute(SQL)
+        mysql.commit()
+
+
 # 循环打印性能事件
 b["events"].open_perf_buffer(print_event)
 while 1:
