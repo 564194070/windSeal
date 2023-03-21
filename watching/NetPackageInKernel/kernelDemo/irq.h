@@ -1,5 +1,5 @@
-// 位置:
-// 对软中断的控制
+// 位置:include/linux
+// 对中断的控制
 struct irq_chip {
 	// 祖先硬件设备
 	struct device	    *parent_device;
@@ -9,7 +9,7 @@ struct irq_chip {
 	// 不同芯片的中断控制器对其挂接的IRQ有不同的控制方法，下面都是回调函数，指向系统实际中断控制器所使用的控制方式的函数指针构成。
 	unsigned int	    (*irq_startup)(struct irq_data *data);	//启动
 	void		        (*irq_shutdown)(struct irq_data *data);	//关闭
-	void		        (*irq_enable)(struct irq_data *data);	//使能
+	void		        (*irq_enable)(struct irq_data *data);	//使能 不同IRQ的使能需要写入寄存器不同的bits,用于使能单个IRQ
 	void		        (*irq_disable)(struct irq_data *data);	//禁止
 
 	void		        (*irq_ack)(struct irq_data *data);		//响应中断，清除当前中断使可以接受下个中断
@@ -59,3 +59,108 @@ struct irq_chip {
 
 
 
+// 位置: include/linux/irqdesc.h
+// 对中断的描述
+struct irq_desc {
+	struct irq_common_data		irq_common_data;
+	struct irq_data				irq_data;
+	unsigned int 				__percpu	*kstat_irqs;
+	irq_flow_handler_t			handle_irq;
+#ifdef CONFIG_IRQ_PREFLOW_FASTEOI
+	irq_preflow_handler_t		preflow_handler;
+#endif
+	// 是IRQ对应的中断处理函数(ISR) 理论上该指向函数，实际上指向了struct irqaction
+	struct irqaction			*action;	/* IRQ action list */
+	unsigned int				status_use_accessors;
+	unsigned int				core_internal_state__do_not_mess_with_it;
+	// 关闭该IRQ的嵌套深度 >0表示禁用中断 0表示可启用中断
+	unsigned int				depth;		/* nested irq disables */
+	unsigned int				wake_depth;	/* nested wake enables */
+	unsigned int				tot_count;
+	unsigned int				irq_count;	/* For detecting broken IRQs */
+	unsigned long				last_unhandled;	/* Aging timer for unhandled count */
+	unsigned int				irqs_unhandled;
+	atomic_t					threads_handled;
+	int							threads_handled_last;
+	raw_spinlock_t				lock;
+	struct cpumask				*percpu_enabled;
+	const struct cpumask		*percpu_affinity;
+#ifdef CONFIG_SMP
+	const struct cpumask		*affinity_hint;
+	struct irq_affinity_notify  *affinity_notify;
+#ifdef CONFIG_GENERIC_PENDING_IRQ
+	cpumask_var_t				pending_mask;
+#endif
+#endif
+	unsigned long				threads_oneshot;
+	atomic_t					threads_active;
+	wait_queue_head_t       	wait_for_threads;
+#ifdef CONFIG_PM_SLEEP
+	unsigned int				nr_actions;
+	unsigned int				no_suspend_depth;
+	unsigned int				cond_suspend_depth;
+	unsigned int				force_resume_depth;
+#endif
+#ifdef CONFIG_PROC_FS
+	struct proc_dir_entry		*dir;
+#endif
+#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
+	struct dentry				*debugfs_file;
+	const char					*dev_name;
+#endif
+#ifdef CONFIG_SPARSE_IRQ
+	struct rcu_head				rcu;
+	struct kobject				kobj;
+#endif
+	struct mutex				request_mutex;
+	int							parent_irq;
+	struct module				*owner;
+	// /proc/interupts 中断的名称
+	const char		*name;		
+} ____cacheline_internodealigned_in_smp;
+
+
+// 位置: include\linux\irqaction
+// 中断函数结构体
+// 硬件设备卸载时，对应的中断处理函数也从IRQ链表中移除，
+struct irqaction {
+	// 历史遗留问题，早期处理器中硬中断很少，有些编号被分配给了标准系统组件(keyboard)
+	// 为了服务于更多设备,共享有限的IRQ中断号，一个中断号对应多个不同处理函数，处理函数通过单链表串联
+	// 中断发生时，IRQ链表上所有irqaction的handler都要被执行，判断是否是自己设备产生的中断。读设备中断状态寄存器，共享中断时，不是你产生的也会调用你的handler，发现不是就尽快退出
+	
+	// 中断处理函数
+	irq_handler_t		handler;
+	// 挂接在一个IRQ上不同设备的标识，方便分辨卸载谁
+	void			*dev_id;
+	void __percpu		*percpu_dev_id;
+	// 共享中断IRQ队列中下一个中断处理函数
+	struct irqaction	*next;
+	irq_handler_t		thread_fn;
+	struct task_struct	*thread;
+	struct irqaction	*secondary;
+	unsigned int		irq;
+	unsigned int		flags;
+	unsigned long		thread_flags;
+	unsigned long		thread_mask;
+	const char		*name;
+	struct proc_dir_entry	*dir;
+} ____cacheline_internodealigned_in_smp;
+
+
+// 位置 : linux/linux/irq.h
+// irq_chip的函数指针都要加该参数，与中断控制密切相关
+// 在irq_desc中与中断控钱文琦666制器紧密联系这部分被单独提取，构成irq_data结构体
+struct irq_data {
+	u32						mask;
+	unsigned int			irq;
+	unsigned long			hwirq;
+	struct irq_common_data	*common;
+	// 指向了这个IRQ挂接的中断控制器
+	// 使用irq_set_chip绑定后，可以利用irq_chip提供的各种函数32
+	struct irq_chip			*chip;
+	struct irq_domain		*domain;
+#ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
+	struct irq_data			*parent_data;
+#endif
+	void					*chip_data;
+};
