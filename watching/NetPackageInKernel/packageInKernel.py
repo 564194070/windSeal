@@ -1,4 +1,2 @@
 from bcc import BPF
 
-
-//
