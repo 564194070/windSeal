@@ -6,6 +6,9 @@
 中断控制器控制相关数据结构 struct irq_chip 具体解析详见 kernelDemo/irq.h
 中断控制器描述相关数据结构 struct irq_desc 具体解析详见 kernekDemo/irq.h
 
+2.软中断和硬中断
+    IRQ有irq和hwirq两种编号。irq软件使用的中断号，hwirq是硬件中断号或者说物理中断号。
+
 
 
 
