@@ -9,7 +9,7 @@ struct irq_chip {
 	// 不同芯片的中断控制器对其挂接的IRQ有不同的控制方法，下面都是回调函数，指向系统实际中断控制器所使用的控制方式的函数指针构成。
 	unsigned int	    (*irq_startup)(struct irq_data *data);	//启动
 	void		        (*irq_shutdown)(struct irq_data *data);	//关闭
-	void		        (*irq_enable)(struct irq_data *data);	//使能 不同IRQ的使能需要写入寄存器不同的bits,用于使能单个IRQ
+	void		        (*irq_enable)(struct irq_data *data);	//使能 不同IRQ的使能需要写入寄存器不同的bits,用于使能单个IRQ 对所有CPU有效
 	void		        (*irq_disable)(struct irq_data *data);	//禁止
 
 	void		        (*irq_ack)(struct irq_data *data);		//响应中断，清除当前中断使可以接受下个中断
@@ -83,7 +83,7 @@ struct irq_desc {
 	atomic_t					threads_handled;
 	int							threads_handled_last;
 	raw_spinlock_t				lock;
-	struct cpumask				*percpu_enabled;
+	struct cpumask				*percpu_enabled;		//位域 控制单个IRQ对单个CPU有效
 	const struct cpumask		*percpu_affinity;
 #ifdef CONFIG_SMP
 	const struct cpumask		*affinity_hint;
@@ -163,4 +163,43 @@ struct irq_data {
 	struct irq_data			*parent_data;
 #endif
 	void					*chip_data;
+};
+
+
+// 位置:include/linux/irqdomain.h
+// 将中断控制器local的物理中断号转换成Linux全局虚拟中断号的机制
+// 虚拟：和具体的硬件连接没有关系，只是单纯变成了一个数字而已  虚拟->物理 映射  物理->虚拟 逆向映射
+struct irq_domain {
+	struct list_head link;
+	const char *name;
+	// 具体的映射过程
+	const struct irq_domain_ops *ops;
+	void *host_data;
+	unsigned int flags;
+	unsigned int mapcount;
+
+	/* Optional data */
+	struct fwnode_handle *fwnode;
+	enum irq_domain_bus_token bus_token;
+	struct irq_domain_chip_generic *gc;
+#ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
+	struct irq_domain *parent;
+#endif
+#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
+	struct dentry		*debugfs_file;
+#endif
+
+	/* reverse map data. The linear map gets appended to the irq_domain */
+	irq_hw_number_t hwirq_max;
+	// 对硬件映射有意义
+	unsigned int revmap_direct_max_irq;
+	// 对线性映射有意义
+	unsigned int revmap_size;
+	struct radix_tree_root revmap_tree;
+	// 只对radix_tree 起作用
+	struct mutex revmap_tree_mutex;
+	// 中断从外部来，传递物理中断号，逆向映射，根据映射规则获取虚拟中断号
+	// 大于256上radix tree 小于256上线性映射(假如只有两个中断0和63 但是还是要使用长度63的数组)
+	// key是hwirq Value是irq
+	unsigned int linear_revmap[];
 };
