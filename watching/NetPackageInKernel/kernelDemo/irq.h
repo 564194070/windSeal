@@ -203,3 +203,36 @@ struct irq_domain {
 	// key是hwirq Value是irq
 	unsigned int linear_revmap[];
 };
+
+// 位置: include/linux/irqdomain.h
+// 具体的映射过程
+
+struct irq_domain_ops {
+	// 判断dst中由node描述的中断控制器是否和由d指向的irq_domain相匹配
+	int (*match)(struct irq_domain *d, struct device_node *node,
+		     enum irq_domain_bus_token bus_token);
+	int (*select)(struct irq_domain *d, struct irq_fwspec *fwspec,
+		      enum irq_domain_bus_token bus_token);
+	//将物理中断号"翻译"成虚拟中断号
+	int (*map)(struct irq_domain *d, unsigned int virq, irq_hw_number_t hw);
+	void (*unmap)(struct irq_domain *d, unsigned int virq);
+	// translate 根据dst的信息生成hwirq node设备节点信息,out_hwirq翻译后形成的中断号
+	int (*xlate)(struct irq_domain *d, struct device_node *node,
+		     const u32 *intspec, unsigned int intsize,
+		     unsigned long *out_hwirq, unsigned int *out_type);
+#ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
+	/* extended V2 interfaces to support hierarchy irq_domains */
+	int (*alloc)(struct irq_domain *d, unsigned int virq,
+		     unsigned int nr_irqs, void *arg);
+	void (*free)(struct irq_domain *d, unsigned int virq,
+		     unsigned int nr_irqs);
+	int (*activate)(struct irq_domain *d, struct irq_data *irqd, bool reserve);
+	void (*deactivate)(struct irq_domain *d, struct irq_data *irq_data);
+	int (*translate)(struct irq_domain *d, struct irq_fwspec *fwspec,
+			 unsigned long *out_hwirq, unsigned int *out_type);
+#endif
+#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
+	void (*debug_show)(struct seq_file *m, struct irq_domain *d,
+			   struct irq_data *irqd, int ind);
+#endif
+};
