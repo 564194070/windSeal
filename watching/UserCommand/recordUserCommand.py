@@ -82,7 +82,10 @@ static int __getArgs(struct pt_regs *ctx, void *ptr, struct forkInfo *data)
 	events.perf_submit(ctx,data,sizeof(struct forkInfo));
 	return 1;
 }
-int syscall__execve(struct pt_regs *ctx, const char * filename, const char *const * argv, const char *const * envp)
+//int syscall__execve(struct pt_regs *ctx, const char * filename, const char *const * argv, const char *const * envp)
+int syscall__execve(struct pt_regs *ctx, const char *filename,
+                const char *const __user *argv,
+                const char *const __user *const __user *envp)
 {
 	/*
 	 * 内核插桩点 tracepoint:syscalls:sys_enter_execve 在父进程中创建一个子进程,自己成调用exec启动新的程序(执行程序函数)
@@ -180,6 +183,7 @@ else:
 b = BPF(text=bpf_text)
 execve_fnname = b.get_syscall_fnname("execve")
 # 不是这个就不能读入参了，现阶段原理暂不明细
+print(execve_fnname)
 b.attach_kprobe(event=execve_fnname, fn_name="syscall__execve")
 b.attach_kretprobe(event=execve_fnname, fn_name="hookSyscallExecveRet")
 
