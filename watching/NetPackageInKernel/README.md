@@ -29,8 +29,30 @@ irq_domain 物理中断和逻辑中断源
 4.ISR执行流程
     中断经过中断控制器到达CPU后，先irq_find_mapping(),根据物理终端hwirq查找映射数组，得到虚拟中断号irq。
 
+5.softirq的类型
+    tasklet的实现是建立在softirq之上的，内核2.3版本引入的，work queue，内核2.5版本引入
+    tasklet HI_SOFTIRQ,TASKLET_SOFTIRQ
+    网络的发送和接收操作 NET_TX_SOFTIRQ,NET_RX_SOFTIRQ
+    实现SMP系统上周期性负载均衡的调度器 SCHED_SOFTIRQ
+    启用高分辨率定时器需要HRTIMER_SOFTIRQ
+    
+6.softirq调用流程
+    void open_softirq(int nr, void (*action)(struct softirq_action *)) 
+    向softirq中断源添加新的中断源，使中断源和执行函数绑定
 
+    完成了HI_SOFTIRQ和TASKLET_SOFTIRQ的执行函数的注册
+    void __init softirq_init() 
+    -- open_softirq(TASKLET_SOFTIRQ, tasklet_action);
+    -- open_softirq(HI_SOFTIRQ, tasklet_hi_action);
 
+    其他softirq是在各自模块中初始化的
+    void __init init_timers(void)
+    -- init_timer_cpus()
+    -- open_softirq(TIMER_SOFTIRQ，run_timer_softirq);
+    前半段中断结束后，调用raise_softirq() 设置softirq的pengding图， 由__softirq_pending的per-CPU形式的变量表示，
+    让内核将指定的软中断加入到全局队列中，从而触发软中断处理程序的执行
+
+    /softirq相关序号定义在include/linux/interrupt中,
 
 
 
