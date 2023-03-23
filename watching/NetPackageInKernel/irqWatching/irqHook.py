@@ -6,28 +6,24 @@ bpf_text = """
 
 struct domain
 {
-    u64 hwirq;
-    u32 len;
-    unsigned int size;
-    const char *name;
+    u32 nr;
+
 };
 
 // 创建一个性能事件，在触发该事件的时时候发生前后端交互行为
 BPF_PERF_OUTPUT(events);
 
-int test(struct pt_regs *ctx, struct irq_domain *domain, irq_hw_number_t hwirq, unsigned int *irq, struct irq_desc * retval)
+int test(struct pt_regs *ctx, int nr)
 {
     struct domain data = {};
-    data.len = sizeof(*domain).name;
-    data.size = (*domain).revmap_size;
-    data.name = (*domain).name;
-    events.perf_submit(ctx,&data,sizeof(struct domain));
+    data.nr = nr;
+    events.perf_submit(ctx, &data, sizeof(data));
     return 0;
 }
 """
 
 b = BPF(text=bpf_text)
-b.attach_kprobe(event="__irq_resolve_mapping", fn_name="test")
+b.attach_kprobe(event="raise_softirq", fn_name="test")
 
 # header
 #print("%-18s %-16s %-6s %s" % ("TIME(s)", "COMM", "PID", "MESSAGE"))
@@ -35,10 +31,8 @@ b.attach_kprobe(event="__irq_resolve_mapping", fn_name="test")
 def print_event(cpu, data, size):
     # 获取性能事件打印的参数
     event = b["events"].event(data)
-    len = event.len
-    size = event.size
-    name = event.name
-    print("%-18s %-16s %-6s" % (len, size, name))
+    len = event.nr
+    print("%-18s" % len)
 
 # 循环打印性能事件
 b["events"].open_perf_buffer(print_event)
