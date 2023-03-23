@@ -160,7 +160,7 @@ int hookSyscallExecveRet(struct pt_regs* ctx)
 	// 获取返回值
     data.retval = PT_REGS_RC(ctx);
 	//提交性能事件，开始和前端交互
-    events.perf_submit(ctx, &data, sizeof(data));
+    events.perf_submit(ctx, &data, sizeof(struct forkInfo));
     
 	return 0;
 }
