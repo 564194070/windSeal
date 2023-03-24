@@ -246,3 +246,17 @@ struct softirq_action
 // kernel/softirq.c
 // 作用：在内核加载之初 管理softirq中断源,在编译时确定中断源，不能在运行时动态增加。
 static struct softirq_action softirq_vec[NR_SOFTIRQS] __cacheline_aligned_in_smp;
+
+// 软中断，执行延迟处理的任务，不像硬中断，直接就要拿到CPU
+do_softirq() 函数中，会遍历所有的软中断，执行相应的软中断处理程序。过多的软中断可能导致系统性能下降，过少的软中断可能无法满足系统需求
+HI_SOFTIRQ=0,			//高优先级软中断的数量为 0，也就是说，系统中不存在需要高优先级处理的软中断
+TIMER_SOFTIRQ =  1, 	//定时器软中断
+NET_TX_SOFTIRQ = 2,		//网络传输软中断
+NET_RX_SOFTIRQ = 3,		//网络接收软中断
+BLOCK_SOFTIRQ =  4,		//块设备软中断 用于处理IO
+IRQ_POLL_SOFTIRQ=5,		//IRQ轮询软中断，处理依赖软件轮询而不是中断的程序
+TASKLET_SOFTIRQ =6,		//任务软中断，用于处理轻量级的中断处理任务
+SCHED_SOFTIRQ =  7,		//调度软中断,内核线程上下文中执行的需要延迟处理的文件
+HRTIMER_SOFTIRQ =8,		//高精度定时器软中断，处理高分辨率定时器任务
+RCU_SOFTIRQ  =   9,		//RCU机制软中断，用于负责内存释放
+NR_SOFTIRQS =   10,		//软中断的数量
