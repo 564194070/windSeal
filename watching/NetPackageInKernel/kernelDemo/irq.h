@@ -236,3 +236,13 @@ struct irq_domain_ops {
 			   struct irq_data *irqd, int ind);
 #endif
 };
+
+
+struct softirq_action
+{
+	void	(*action)(struct softirq_action *);
+};
+
+// kernel/softirq.c
+// 作用：在内核加载之初 管理softirq中断源,在编译时确定中断源，不能在运行时动态增加。
+static struct softirq_action softirq_vec[NR_SOFTIRQS] __cacheline_aligned_in_smp;
