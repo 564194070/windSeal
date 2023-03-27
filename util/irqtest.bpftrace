@@ -1,4 +1,3 @@
 kprobe:raise_softirq {
-  printf("PID %d called irq_find_mapping\n", pid);
-  @count = count();
+  printf("%s\n",kstack)
 }
