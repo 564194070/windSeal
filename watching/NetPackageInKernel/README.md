@@ -55,7 +55,11 @@ irq_domain 物理中断和逻辑中断源
     /softirq相关序号定义在include/linux/interrupt中,
 
 
+ksoftirqd线程创建过程
+    位置: /kernel/smpboot.c
+    函数: int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
 
+    
 
 
 
