@@ -58,22 +58,30 @@ irq_domain 物理中断和逻辑中断源
 ksoftirqd线程创建过程
     位置: /kernel/smpboot.c
     函数: int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
+    1.启动内核->2.
+    内核代码:
+    // softirq_threads 内核中的一组内核线程，用于处理软中断(网络中断，磁盘IO中断)
+    // Linux为每个CPU都维护了一个软中断队列，事件发生时，内核将事件添加到队列中，软中断线程处理队列中的事件，在CPU空闲时。
+    static struct smp_hotplug_thread softirq_threads = {
+        .store			    = &ksoftirqd,
+        .thread_should_run	= ksoftirqd_should_run,
+        .thread_fn		    = run_ksoftirqd,
+        .thread_comm		= "ksoftirqd/%u",
+    };
 
-    
+    static __init int spawn_ksoftirqd(void)
+    {
+        cpuhp_setup_state_nocalls(CPUHP_SOFTIRQ_DEAD, "softirq:dead", NULL,
+                    takeover_tasklets);
+        BUG_ON(smpboot_register_percpu_thread(&softirq_threads));
+        // BUG_ON 内核中的宏定义,运行时检查条件是否满足,条件不满足就触发内核崩溃并输出错误
+        // smpboot_register_percpu_thread 用于将一个特定的线程注册为多处理器系统中本地处理器CPU的专用线程 只运行在指定CPU上
+        // 每个CPU都有自己内核线程 用于处理本地中断和软中断, 在多核系统中，这可以有效地利用每个 CPU 的处理能力，提高系统的并发性能。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return 0;
+    }
+    // spawn_ksoftirqd 是ksoftirqd的守护进程,管理内核系统的软件中断处理程序,自动调整softirq_threads的内核线程
+    early_initcall(spawn_ksoftirqd);
 
 
 参考文章:https://zhuanlan.zhihu.com/p/83709066
