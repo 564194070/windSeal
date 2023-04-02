@@ -260,3 +260,50 @@ SCHED_SOFTIRQ =  7,		//调度软中断,内核线程上下文中执行的需要�
 HRTIMER_SOFTIRQ =8,		//高精度定时器软中断，处理高分辨率定时器任务
 RCU_SOFTIRQ  =   9,		//RCU机制软中断，用于负责内存释放
 NR_SOFTIRQS =   10,		//软中断的数量
+
+
+// Linux收到网络包，分配到特定的softirq上下文，适当时机上下文处理数据包，这时候数据包就存在CPU的softnet_data队列中
+// softnet_data 设计的原因是提高多核系统的网络吞吐量，每个CPU都有自己的软中断上下文处理。更快的处理收到的数据包，降低了网络延迟和提高了网络性能。
+// 存储软件网络中接收到的数据包，per-CPU的数据结构，每个CPU都有自己的。
+struct softnet_data {
+	struct list_head	poll_list;				//
+	struct sk_buff_head	process_queue;	
+
+	/* stats */
+	unsigned int		processed;
+	unsigned int		time_squeeze;
+	unsigned int		received_rps;
+#ifdef CONFIG_RPS
+	struct softnet_data	*rps_ipi_list;
+#endif
+#ifdef CONFIG_NET_FLOW_LIMIT
+	struct sd_flow_limit __rcu *flow_limit;
+#endif
+	struct Qdisc		*output_queue;
+	struct Qdisc		**output_queue_tailp;
+	struct sk_buff		*completion_queue;			//链表，存储网络数据包的数据结构，用于存储收到的数据和相关的元数据
+#ifdef CONFIG_XFRM_OFFLOAD
+	struct sk_buff_head	xfrm_backlog;
+#endif
+	/* written and read only by owning cpu: */
+	struct {
+		u16 recursion;
+		u8  more;
+	} xmit;
+#ifdef CONFIG_RPS
+	/* input_queue_head should be written by cpu owning this struct,
+	 * and only read by other cpus. Worth using a cache line.
+	 */
+	unsigned int		input_queue_head ____cacheline_aligned_in_smp;
+
+	/* Elements below can be accessed between CPUs for RPS/RFS */
+	call_single_data_t	csd ____cacheline_aligned_in_smp;
+	struct softnet_data	*rps_ipi_next;
+	unsigned int		cpu;
+	unsigned int		input_queue_tail;
+#endif
+	unsigned int		dropped;
+	struct sk_buff_head	input_pkt_queue;
+	struct napi_struct	backlog;
+
+};
