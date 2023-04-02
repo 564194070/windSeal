@@ -58,7 +58,7 @@ irq_domain 物理中断和逻辑中断源
 ksoftirqd线程创建过程
     位置: /kernel/smpboot.c
     函数: int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
-    1.启动内核->2.
+    1.启动内核->2.添加本地线程->3.处理软中断
     内核代码:
     // softirq_threads 内核中的一组内核线程，用于处理软中断(网络中断，磁盘IO中断)
     // Linux为每个CPU都维护了一个软中断队列，事件发生时，内核将事件添加到队列中，软中断线程处理队列中的事件，在CPU空闲时。
@@ -82,6 +82,33 @@ ksoftirqd线程创建过程
     }
     // spawn_ksoftirqd 是ksoftirqd的守护进程,管理内核系统的软件中断处理程序,自动调整softirq_threads的内核线程
     early_initcall(spawn_ksoftirqd);
+
+    ksoftirqd创建后会进入线程循环函数ksoftirq_should_run 和 run_ksoftirq
+
+网络子模块初始化
+    位置:/net/core/dev.c
+
+    //初始化网络模块
+    subsys_initcall初始化网络子系统
+    //遍历系统中每个可能存在的CPU核心,在每个CPU核心上执行一次循环体中的代码
+    for_each_possible_cpu(i)
+    
+    // 创建延迟执行任务，将比较重的任务磁盘IO，网络IO推迟到空闲时间执行，避免对系统性能影响
+	struct work_struct *flush = per_cpu_ptr(&flush_works, i);
+    // 处理接收数据包的软中断上下文信息
+	struct softnet_data *sd = &per_cpu(softnet_data, i);
+
+    // 注册发送和接收的中断处理函数
+    open_softirq(NET_TX_SOFTIRQ, net_tx_action);
+	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
+
+
+
+
+
+
+
+
 
 
 参考文章:https://zhuanlan.zhihu.com/p/83709066
