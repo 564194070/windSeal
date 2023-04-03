@@ -266,24 +266,27 @@ NR_SOFTIRQS =   10,		//软中断的数量
 // softnet_data 设计的原因是提高多核系统的网络吞吐量，每个CPU都有自己的软中断上下文处理。更快的处理收到的数据包，降低了网络延迟和提高了网络性能。
 // 存储软件网络中接收到的数据包，per-CPU的数据结构，每个CPU都有自己的。
 struct softnet_data {
-	struct list_head	poll_list;				//
-	struct sk_buff_head	process_queue;	
+	struct list_head	poll_list;				// 网络设备轮询列表，需要轮询的网络设备的列表
+	struct sk_buff_head	process_queue;			// 正在处理的数据包队列，从input_pkt_queue移动到process_queue 然后处理并发往协议栈
 
 	/* stats */
-	unsigned int		processed;
-	unsigned int		time_squeeze;
-	unsigned int		received_rps;
+	unsigned int		processed;				//已处理数据包的数量
+	//记录下一次处理软中断的时间戳。具体来说，如果当前时间戳小于 time_squeeze，则 softirq 将被延迟处理；否则，softirq 将会立即执行。
+	unsigned int		time_squeeze;			//处理网络软中断（softirq）时间延迟问题的一种机制 限制网络中断处理的时间和频率
+	//将接收到的网络数据包分配到多个CPU核心上去处理，提高系统并发性和网络处理能力，网络数据包会先由硬件接收，然后通过软件进行分配，最终由多个 CPU 核心进行处理
+	unsigned int		received_rps;			//已接受RPS(接收数据包分配)数据包数量
 #ifdef CONFIG_RPS
-	struct softnet_data	*rps_ipi_list;
+	struct softnet_data	*rps_ipi_list;			//多核心网络接受负载均衡器
 #endif
 #ifdef CONFIG_NET_FLOW_LIMIT
-	struct sd_flow_limit __rcu *flow_limit;
+	struct sd_flow_limit __rcu *flow_limit;		//保存软件定义的流量限制规则，用于控制网络设备接收数据包的速率，以避免过度拥塞或流量爆发，从而保护网络稳定性和可靠性
 #endif
-	struct Qdisc		*output_queue;
-	struct Qdisc		**output_queue_tailp;
-	struct sk_buff		*completion_queue;			//链表，存储网络数据包的数据结构，用于存储收到的数据和相关的元数据
+	// Qdisc网络数据包的调度和排队
+	struct Qdisc		*output_queue;			//当前网络接口的出口队列，通常被多个进程共享，管理出站数据包排队和调度
+	struct Qdisc		**output_queue_tailp;	//指向网络接口的出口队列尾部的指针
+	struct sk_buff		*completion_queue;		//链表，管理异步套接字操作的完成状态
 #ifdef CONFIG_XFRM_OFFLOAD
-	struct sk_buff_head	xfrm_backlog;
+	struct sk_buff_head	xfrm_backlog;			//积压数据包队列，存放因为负载过高无法及时处理的数据包，暂存避免被丢弃
 #endif
 	/* written and read only by owning cpu: */
 	struct {
@@ -298,12 +301,12 @@ struct softnet_data {
 
 	/* Elements below can be accessed between CPUs for RPS/RFS */
 	call_single_data_t	csd ____cacheline_aligned_in_smp;
-	struct softnet_data	*rps_ipi_next;
-	unsigned int		cpu;
-	unsigned int		input_queue_tail;
+	struct softnet_data	*rps_ipi_next;				//协调多个 CPU 核心对网络接口收到的数据包进行处理
+	unsigned int		cpu;						//表示CPU编号
+	unsigned int		input_queue_tail;			//输入队列的尾部
 #endif
 	unsigned int		dropped;
-	struct sk_buff_head	input_pkt_queue;
-	struct napi_struct	backlog;
+	struct sk_buff_head	input_pkt_queue;			//输入数据包队列，存放需要处理的数据包
+	struct napi_struct	backlog;					//帮助系统处理高速网络数据包接收和处理，提高网络性能和可靠性
 
 };
