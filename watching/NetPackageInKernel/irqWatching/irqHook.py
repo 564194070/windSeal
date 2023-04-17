@@ -14,16 +14,44 @@ bpf_text = """
 
 struct processInfo
 {
-    u32 nr;
-    char irqName[30];
+    u32 nr;             // 中断号 不涉及中断的流程为 -1
+    char irqName[30];   // 中断类型, 不涉及中断的为空
+
+    u32 uid;            // 用户信息
+    u32 processID;      // 进程号
+    u32 threadID;       // 线程号
+    u32 threadGroupID;  // 线程组号
+    u32 ppid;           // 父进程号
 };
+
+static void inline GetProcessInfo(struct processInfo *process)
+{
+
+	// uid 用户ID
+	process->uid = bpf_get_current_uid_gid() & 0xffffffff;
+	// pid_tgid 线程组标识+线程标识
+	u64 pid_tgid = bpf_get_current_pid_tgid();
+	// tid 线程ID 线程唯一
+	process->threadID = (u32)pid_tgid;
+	// pid 进程ID
+	process->threadID = pid_tgid >> 32;
+
+    // 辅助函数 获取任务(进程)的task结构体
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	// 从task里面拿父进程信息
+	process->ppid = task->real_parent->tgid;
+	// 获取进程所在的cgroup空间
+    // netns = task->nsproxy->net_ns->ns.inum;
+}
+
+
 
 // 创建一个性能事件，在触发该事件的时时候发生前后端交互行为
 BPF_PERF_OUTPUT(events);
 
 // 监测软中断触发,修改标志位,使得koftirq可以读出发生了软中断,然后调用注册的处理函数
 int raise_softirq_test(struct pt_regs *ctx,  int nr)
-{
+{    
     struct processInfo data = {};
     data.nr = nr;
 
@@ -112,12 +140,19 @@ int ip_output(struct pt_regs *ctx, struct net *net, struct sock *sk, struct sk_b
 }
 """
 
-
+# 软中断信息获取
 if IRQ_Switch:
     bpf_text = bpf_text.replace(
         "IRQ_FILTER", 'if (data.nr != %s) {return ;}' % nrFilter)
 else:
     bpf_text = bpf_text.replace("IRQ_FILTER", ' ')
+
+# 
+if PORT_Switch:
+    bpf_text = bpf_text.replace(
+        "PORT_SWITCH", 'if (data.port != %s) {return ;}' % srcPort)
+else:
+    bpf_text = bpf_text.replace("RORT_SWITCH", ' ')
 
 
 b = BPF(text=bpf_text)
