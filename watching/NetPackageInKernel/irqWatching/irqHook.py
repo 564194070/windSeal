@@ -3,11 +3,16 @@ from bcc import BPF
 IRQ_Switch = True
 nrFilter = 2
 
+PORT_Switch = True
+srcPort = 5641
+dstPort = 5642
+
+
 # Kprobe for irq_find_mapping
 bpf_text = """
 #include <include/linux/interrupt.h>
 
-struct domain
+struct processInfo
 {
     u32 nr;
     char irqName[30];
@@ -19,7 +24,7 @@ BPF_PERF_OUTPUT(events);
 // 监测软中断触发,修改标志位,使得koftirq可以读出发生了软中断,然后调用注册的处理函数
 int raise_softirq_test(struct pt_regs *ctx,  int nr)
 {
-    struct domain data = {};
+    struct processInfo data = {};
     data.nr = nr;
 
     //IRQ_FILTER
@@ -47,7 +52,7 @@ int raise_softirq_test(struct pt_regs *ctx,  int nr)
 // 网络发送中断注册函数
 void net_tx_action (struct pt_regs *ctx, struct softirq_action *h)
 {
-    struct domain data = {};
+    struct processInfo data = {};
     memcpy(data.irqName, "NET_TX_ACTION", sizeof("NET_TX_ACTION"));
     events.perf_submit(ctx, &data, sizeof(data));
 }
@@ -55,7 +60,7 @@ void net_tx_action (struct pt_regs *ctx, struct softirq_action *h)
 // 网络接收中断注册函数
 void net_rx_action (struct pt_regs *ctx, struct softirq_action *h)
 {
-    struct domain data = {};
+    struct processInfo data = {};
     memcpy(data.irqName, "NET_RX_ACTION", sizeof("NET_RX_ACTION"));
     events.perf_submit(ctx, &data, sizeof(data));
 }
@@ -64,12 +69,47 @@ void net_rx_action (struct pt_regs *ctx, struct softirq_action *h)
 // 驱动取下网络包
 void napi_gro_receive(struct pt_regs *ctx, struct napi_struct * napi, struct sk_buff * skb)
 {
-    struct domain data = {};
+    struct processInfo data = {};
     memcpy(data.irqName, "napi_gro_receive", sizeof("napi_gro_receive"));
     events.perf_submit(ctx, &data, sizeof(data));
 }
 
+// 网络包处理框架
+int netif_receive_skb(struct pt_regs *ctx, struct sk_buff *skb)
+{
+    struct processInfo data = {};
+}
 
+
+// iptables PREROUTING链路
+int ip_rcv(struct pt_regs *ctx, struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,struct net_device *orig_dev)
+{
+
+}
+
+// iptables INPUT链路
+int ip_local_deliver(struct pt_regs *ctx, struct sk_buff *skb)
+{
+
+}
+
+// iptables FORWARD链路
+int ip_forward(struct pt_regs *ctx, struct sk_buff *skb)
+{
+
+}
+
+// iptables OUTPUT链路
+int ip_local_out(struct pt_regs *ctx, struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+
+}
+
+// iptables POSTROUTING 链路
+int ip_output(struct pt_regs *ctx, struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+
+}
 """
 
 
