@@ -24,6 +24,49 @@ struct processInfo
     u32 ppid;           // 父进程号
 };
 
+static inline void  getInfoFromSkaddr(struct pt_regs *ctx, struct sockaddr *skaddr, struct data_t data)
+{
+        struct sockaddr_in *sockaddrin;
+
+        sockaddrin = (struct sockaddr_in *)(&skaddr);
+        data.sPort = bpf_ntohs(sockaddrin->sin_port);
+        data.saddr = sockaddrin->sin_addr.s_addr;
+        data.protocal = sockaddrin->sin_family;
+        events.perf_submit(ctx, &data, sizeof(data));
+
+}
+static inline void  getInfoFromSkbuff(struct pt_regs *ctx,struct sk_buff *skb, struct data_t data)
+{
+        struct iphdr *iphdrOutput;
+        struct tcphdr *tcphdrOutput;
+        iphdrOutput = (struct iphdr *)(skb->head+ skb->network_header);
+        tcphdrOutput = (struct tcphdr*)(skb->head + skb->transport_header);
+        data.pid = bpf_get_current_pid_tgid() >> 32;
+        data.ts = bpf_ktime_get_ns();
+        bpf_get_current_comm(&data.comm, sizeof(data.comm));
+        data.saddr = iphdrOutput->saddr;
+        data.daddr = iphdrOutput->daddr;
+        data.sPort = bpf_ntohs(tcphdrOutput->source);
+        data.dPort = bpf_ntohs(tcphdrOutput->dest);
+        data.protocal = skb->protocol;
+        events.perf_submit(ctx, &data, sizeof(data));        
+}
+
+
+static inline void getInfoFromSk(struct pt_regs *ctx, struct sock *sk, struct data_t data)
+{
+        //服务端 套接字的发送端口就是数据包的目标端口 套接字的源地址就是数据包的目标地址 因为所处位置不同
+        data.pid = bpf_get_current_pid_tgid() >> 32;
+        data.ts = bpf_ktime_get_ns();
+        bpf_get_current_comm(&data.comm, sizeof(data.comm));
+        data.daddr = sk->__sk_common.skc_rcv_saddr;
+        data.saddr = sk->__sk_common.skc_daddr;
+        data.dPort = bpf_ntohs(sk->__sk_common.skc_num);
+        data.sPort = bpf_ntohs(sk->__sk_common.skc_dport);
+        data.protocal = sk->__sk_common.skc_family;
+        events.perf_submit(ctx, &data, sizeof(data));
+}
+
 static void inline GetProcessInfo(struct processInfo *process)
 {
 
