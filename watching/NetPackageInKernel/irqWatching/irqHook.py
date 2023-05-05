@@ -181,6 +181,72 @@ int ip_output(struct pt_regs *ctx, struct net *net, struct sock *sk, struct sk_b
 {
 
 }
+
+// 数据包分发至对应协议栈
+int __netif_receive_skb_core(struct pt_regs *ctx, struct sk_buff **pskb, bool pfmemalloc, struct packet_type **ppt_prev)
+{
+
+}
+
+// arp包分流
+int arp_rcv(struct pt_regs *ctx, struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
+{
+    
+}
+
+// ip包分流
+int ip_rcv(struct pt_regs *ctx, struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
+{
+
+}
+
+// tcp报文 通过五元组查看对应的socket 根据不同的socket状态选择不同的处理办法
+int tcp_v4_rcv(struct pt_regs *ctx, struct sk_buff *skb)
+{
+
+}
+
+// udp报文
+int udp_rcv(struct pt_regs *ctx, struct sk_buff *skb)
+{
+
+}
+
+// tcp报文,根据五元组找套接字,根据套接字状态找相关的处理函数
+int tcp_v4_rcv(struct pt_regs *ctx, struct sk_buff *skb)
+{
+
+}
+
+// 链接状态下的数据包处理
+int tcp_v4_do_rcv(struct pt_regs *ctx, struct sk_buff *skb)
+{
+
+}
+
+// TCP包处理完成加入接收队列了
+int tcp_rcv_established(struct pt_regs *ctx, struct sock *sk, struct sk_buff *skb)
+{
+
+}
+
+// 保存数据包到socket队列
+int tcp_queue_rcv(struct pt_regs *ctx, struct sock *sk, struct sk_buff *skb, bool *fragstolen)
+{
+
+}
+
+// TCP数据就绪信息
+int tcp_data_ready(struct pt_regs *ctx, struct sock *sk)
+{
+
+}
+
+// 唤醒等待队列的进程
+int sock_def_readable(struct pt_regs *ctx, struct sock *sk)
+{
+
+}
 """
 
 # 软中断信息获取
